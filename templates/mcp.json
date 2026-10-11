@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "unica": {
+      "command": "${CURSOR_PLUGIN_ROOT}/cursor/unica-cursor-shim.exe",
+      "args": [
+        "${CURSOR_PLUGIN_ROOT}/bootstrap/bin/win-x64/unica-bootstrap.exe",
+        "run", "--plugin-root", "${CURSOR_PLUGIN_ROOT}"
+      ],
+      "env": {
+        "UNICA_RUNTIME_CACHE_DIR": "${userHome}/.cursor/unica/runtimes",
+        "UNICA_PROVIDER_STATE_DIR": "${userHome}/.cursor/unica/provider-state",
+        "UNICA_HOST_CONTEXT_REQUIRED": "1"
+      }
+    }
+  }
+}

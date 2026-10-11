@@ -1,0 +1,12 @@
+/v8project.local.yaml
+/v8project.yaml
+.build/unica
+build/
+**/.build/
+src/
+PLAN.md
+review.md
+ConfigDumpInfo.xml
+DumpFilesIndex.txt
+.cursor/
+tests/*

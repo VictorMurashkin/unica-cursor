@@ -1,0 +1,18 @@
+{
+  "name": "unica",
+  "description": "Unica: skills and MCP server for 1C:Enterprise development (Cursor adapter)",
+  "version": "0.0.0",
+  "author": {
+    "name": "Ingvar Consulting, LLC"
+  },
+  "homepage": "https://ingvar.pro/products/unica/en",
+  "repository": "https://github.com/IngvarConsulting/unica",
+  "license": "LGPL-3.0-or-later",
+  "keywords": [
+    "1c",
+    "1c-enterprise",
+    "bsl",
+    "metadata",
+    "mcp"
+  ]
+}
