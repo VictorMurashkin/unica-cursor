@@ -118,8 +118,10 @@ Codex, Claude Code, Node.js, Python и Java не нужны. Платформа 
 | `.gitignore` | `/v8project.local.yaml` и служебные пути Unica. Точные уже существующие строки не дублируются. |
 | `.cursor/rules/unica.mdc` | Правило для агента. Текст берётся из `templates/unica-rule.mdc`. |
 
-В `.gitignore` всегда добавляются `.build/unica`, `**/.build/`, `ConfigDumpInfo.xml`
-и `DumpFilesIndex.txt`. Строка `/v8project.local.yaml` добавляется вместе с
+В `.gitignore` всегда добавляются `.build/` (кэш Unica и пробы наборов
+исходников), `/build/*` (файловая база, журналы и инструменты в корневом
+`build/`), `.build/unica`, `**/.build/`, `ConfigDumpInfo.xml` и
+`DumpFilesIndex.txt`. Строка `/v8project.local.yaml` добавляется вместе с
 файлами рабочей области; `-NoWorkspaceConfig` её пропускает. Unica читает
 `.gitignore` из индекса Git, поэтому после `enable` выполните `git add -- .gitignore`.
 

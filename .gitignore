@@ -1,6 +1,8 @@
 /v8project.local.yaml
 /v8project.yaml
+.build/
 .build/unica
+/build/*
 build/
 **/.build/
 src/

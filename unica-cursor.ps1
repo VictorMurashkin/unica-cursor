@@ -84,11 +84,15 @@ $script:BootstrapRelPath = 'bootstrap\bin\win-x64\unica-bootstrap.exe'
 $script:WorkspaceConfigName = 'v8project.yaml'
 $script:LocalConfigName = 'v8project.local.yaml'
 $script:LocalExampleName = 'v8project.local.yaml.example'
-# Patterns Unica requires before repositoryReady. **/.build/ also covers the
-# source-set probe <source>/.build/.unica-health-probe; .build/unica alone does not.
+# Patterns Unica requires before repositoryReady, plus the directories it
+# creates while working. .build/ covers the workspace cache and the source-set
+# probe <source>/.build/.unica-health-probe. /build/* covers the root build
+# tree (infobase, logs, tools) and does not ignore a build directory in sources.
 $script:GeneratedGitIgnorePatterns = @(
+    '.build/'
     '.build/unica'
     '**/.build/'
+    '/build/*'
     'ConfigDumpInfo.xml'
     'DumpFilesIndex.txt'
 )
@@ -674,9 +678,9 @@ function Add-GitIgnoreEntry([string]$ProjectRoot, [string]$Entry) {
     Write-Info "Added /$Entry to $file"
 }
 
-# Adds the portable ignore rules Unica checks (workspace cache, source-set
-# .build probe, Designer ConfigDumpInfo.xml and DumpFilesIndex.txt). Exact
-# lines that are already present are left as they are.
+# Adds the portable ignore rules Unica checks (.build/ cache, root /build/*
+# outputs, source-set .build probe, Designer ConfigDumpInfo.xml and
+# DumpFilesIndex.txt). Exact lines that are already present are left as they are.
 function Add-GeneratedGitIgnore([string]$ProjectRoot) {
     $file = Join-Path $ProjectRoot '.gitignore'
     $text = ''
