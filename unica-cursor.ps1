@@ -46,7 +46,7 @@ param(
     [ValidateSet('roots', 'project')]
     [string]$McpMode,
 
-    # Download the core and ALL engines right away (by default Unica delivers engines on demand).
+    # Compatibility switch: install/update always download the core and ALL engines.
     [switch]$Prefetch,
 
     # Replace ${userHome} / ${CURSOR_PLUGIN_ROOT} in generated MCP configs with absolute paths.
@@ -1053,7 +1053,20 @@ function Invoke-Install {
         }
     }
 
-    # 8. Switch ----------------------------------------------------------------
+    # 8. Deliver every pinned runtime before changing the active installation.
+    # Also run for reused installations to repair incomplete runtime caches.
+    Write-Step 'Prefetching the Unica core and all engines (this can take a while)'
+    $exe = Join-Path $installDir $script:BootstrapRelPath
+    Invoke-WithUnicaEnv $null {
+        & $exe prefetch --plugin-root $installDir | Out-Host
+        # Check in this scope: the environment wrapper does not propagate
+        # a native process's LASTEXITCODE back to its caller.
+        if ($LASTEXITCODE -ne 0) {
+            throw "Runtime prefetch failed with exit code $LASTEXITCODE. The active installation was not changed. Check network access and rerun install/update."
+        }
+    }
+
+    # 9. Switch ----------------------------------------------------------------
     $newState = Get-InstallState $installName
     $previous = $null
     if ($active -and $active.current) {
@@ -1063,21 +1076,6 @@ function Invoke-Install {
     Save-Active $installName $previous
     Write-Step "Active installation: $installName"
     Write-InstallLog "activated $installName (previous: $previous)"
-
-    # 9. Optional prefetch -----------------------------------------------------
-    if ($Prefetch) {
-        Write-Step 'Prefetching the Unica core and all engines (this can take a while)'
-        try {
-            $exe = Join-Path $installDir $script:BootstrapRelPath
-            Invoke-WithUnicaEnv $null { & $exe prefetch --plugin-root $installDir | Out-Host }
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warn "prefetch exited with code $LASTEXITCODE. Unica will download what it needs on first use."
-            }
-        }
-        catch {
-            Write-Warn "prefetch failed: $($_.Exception.Message). Unica will download what it needs on first use."
-        }
-    }
 
     # 10-11. Cleanup and hook --------------------------------------------------
     Remove-OldInstalls $installName $previous
