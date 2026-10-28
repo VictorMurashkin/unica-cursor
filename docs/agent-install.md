@@ -59,9 +59,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$USERPROFILE/unica-cursor/u
 ## 3. Установи Unica
 
 ```text
-unica-cursor install
+unica-cursor install -Version stable
 ```
 
+- По умолчанию устанавливай последнюю стабильную: `-Version stable` обходит
+  интерактивное меню. Если пользователь попросил RC, уточни нужный тег
+  (если он ещё не указан) и передай его через `-Version`, например
+  `install -Version v0.15.0-rc.1`. Доступны RC, опубликованные после последней
+  стабильной версии и новее неё. Для человека `install` без параметров
+  показывает меню выбора.
 - Не передавай `-Ref`, `-McpMode`, `-ExpandPaths`, `-Force`, если пользователь
   не просил их явно.
 - Команда скачивает пакет и собирает его. Это может занять несколько минут:

@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   Commands:
-    install   [-Ref <ref>] [-McpMode roots|project] [-Prefetch] [-ExpandPaths] [-Force]
+    install   [-Version stable|vX.Y.Z-rc.N | -Ref <ref>] [-McpMode roots|project] [-Prefetch] [-ExpandPaths] [-Force]
     update    same parameters as install
     rollback
     enable    [-Path <project>] [-NoWorkspaceConfig] [-NoRule] [-Force]
@@ -36,8 +36,11 @@ param(
     [ValidateSet('install', 'update', 'rollback', 'enable', 'disable', 'status', 'uninstall')]
     [string]$Command,
 
-    # Branch (main, next), tag (vX.Y.Z) or commit of IngvarConsulting/unica-marketplace. Default: main.
+    # Manual branch (main, next), tag or commit of unica-marketplace. Bypasses the version menu.
     [string]$Ref,
+
+    # Latest stable or an exact published RC newer than stable. Omit to show a menu.
+    [string]$Version,
 
     # roots: MCP server inside the plugin (default). project: server in <project>/.cursor/mcp.json.
     [ValidateSet('roots', 'project')]
@@ -261,6 +264,85 @@ function Compare-SemVer($A, $B) {
         }
     }
     return 0
+}
+
+# Published releases define the user-facing choices; the matching marketplace
+# tag still supplies the complete plugin, including bootstrap and skills.
+function Get-UnicaReleases {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $headers = @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'unica-cursor' }
+    $page = 1
+    do {
+        try {
+            # Assign first: Windows PowerShell 5.1 emits a REST JSON array as one object.
+            $response = Invoke-RestMethod -Uri "https://api.github.com/repos/IngvarConsulting/unica/releases?per_page=100&page=$page" -Headers $headers -TimeoutSec 30
+            $batch = @($response)
+        }
+        catch {
+            throw "Cannot load Unica releases from GitHub (check network access and API rate limits). Retry later or use -Ref with a known marketplace tag. $($_.Exception.Message)"
+        }
+        $batch
+        $page++
+    } while ($batch.Count -eq 100)
+}
+
+function Get-ReleaseChoices([object[]]$Releases) {
+    $stable = $null
+    foreach ($release in $Releases) {
+        if ($release.draft -or $release.prerelease -or $release.tag_name -notmatch '^v\d+\.\d+\.\d+$') { continue }
+        if (-not $stable -or (Compare-SemVer (ConvertTo-SemVer $release.tag_name) (ConvertTo-SemVer $stable.tag_name)) -gt 0) {
+            $stable = $release
+        }
+    }
+    if (-not $stable) { throw 'GitHub returned no published stable Unica release.' }
+
+    $candidates = New-Object 'System.Collections.Generic.List[object]'
+    $stableVersion = ConvertTo-SemVer $stable.tag_name
+    foreach ($release in $Releases) {
+        if ($release.draft -or -not $release.prerelease -or $release.tag_name -notmatch '^v\d+\.\d+\.\d+-rc\.\d+$') { continue }
+        $candidateVersion = ConvertTo-SemVer $release.tag_name
+        if ((Compare-SemVer $candidateVersion $stableVersion) -le 0 -or
+            [DateTimeOffset]$release.published_at -le [DateTimeOffset]$stable.published_at) { continue }
+        $index = 0
+        while ($index -lt $candidates.Count -and
+            (Compare-SemVer $candidateVersion (ConvertTo-SemVer $candidates[$index].tag_name)) -lt 0) { $index++ }
+        $candidates.Insert($index, $release)
+    }
+    $stable
+    $candidates
+}
+
+function Resolve-InstallRef([string]$RequestedVersion, [string]$RequestedRef) {
+    if ($RequestedRef) {
+        if ($RequestedVersion) { throw '-Version and -Ref cannot be used together.' }
+        if ($RequestedRef -notmatch '^[A-Za-z0-9][A-Za-z0-9._/\-]*$') { throw "Invalid -Ref value '$RequestedRef'." }
+        return $RequestedRef
+    }
+    $choices = @(Get-ReleaseChoices @(Get-UnicaReleases))
+    if ($RequestedVersion) {
+        if ($RequestedVersion -eq 'stable') { return [string]$choices[0].tag_name }
+        $selected = @($choices | Where-Object { $_.tag_name -ceq $RequestedVersion })
+        if ($selected.Count -eq 0) {
+            throw "Version '$RequestedVersion' is not available. Choose stable or one of: $(($choices | ForEach-Object { $_.tag_name }) -join ', ')."
+        }
+        return [string]$selected[0].tag_name
+    }
+    Write-Step 'Choose a Unica version'
+    for ($i = 0; $i -lt $choices.Count; $i++) {
+        $label = 'RC (pre-release)'
+        if ($i -eq 0) { $label = 'latest stable, default' }
+        Write-Info ("{0}. {1} ({2})" -f ($i + 1), $choices[$i].tag_name, $label)
+    }
+    do {
+        try { $answer = Read-Host 'Version number [1]' }
+        catch { throw 'Cannot read version selection. Use -Version stable or -Version vX.Y.Z-rc.N for unattended installation.' }
+        if ([string]::IsNullOrWhiteSpace($answer)) { return [string]$choices[0].tag_name }
+        $number = 0
+        if ([int]::TryParse($answer, [ref]$number) -and $number -ge 1 -and $number -le $choices.Count) {
+            return [string]$choices[$number - 1].tag_name
+        }
+        Write-Warn "Enter a number from 1 to $($choices.Count)."
+    } while ($true)
 }
 
 # ----------------------------------------------------------------------------
@@ -757,11 +839,7 @@ function Invoke-Install {
         }
     }
 
-    $requestedRef = 'main'
-    if ($Ref) { $requestedRef = $Ref }
-    if ($requestedRef -notmatch '^[A-Za-z0-9][A-Za-z0-9._/\-]*$') {
-        throw "Invalid -Ref value '$requestedRef'."
-    }
+    $requestedRef = Resolve-InstallRef $Version $Ref
 
     $active = Get-Active
     $activeState = $null

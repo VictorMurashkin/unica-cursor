@@ -36,12 +36,28 @@ Codex, Claude Code, Node.js, Python и Java не нужны. Платформа 
 
 ```powershell
 .\unica-cursor.cmd install
+.\unica-cursor.cmd install -Version stable
+.\unica-cursor.cmd install -Version v0.15.0-rc.1
 .\unica-cursor.cmd install -Ref next
 .\unica-cursor.cmd install -Ref v0.13.0
 ```
 
-Без `-Ref` берётся ветка `main`. `-Ref next` ставит кандидат в релизы.
-`-Ref` принимает ветку, тег или коммит `unica-marketplace`.
+Без `-Version` и `-Ref` появляется меню: последняя стабильная версия и RC,
+опубликованные после неё, от новых к старым по номеру версии. Enter выбирает
+стабильную. Старые RC, beta и черновики в меню не попадают. Список берётся из
+опубликованных релизов `IngvarConsulting/unica` на GitHub, а полный пакет —
+по соответствующему тегу `unica-marketplace`.
+
+Для запуска без меню передайте `-Version stable` или точный тег из списка,
+например `-Version v0.15.0-rc.1`. RC — предварительные версии для тестирования.
+Точный RC доступен, пока он новее последней стабильной версии и опубликован
+после неё. Если нужен старый релиз, используйте `-Ref`.
+
+`-Ref` принимает ветку, тег или коммит `unica-marketplace` и обходит меню
+и запрос списка релизов. `-Ref next` ставит текущий пакет ветки `next`.
+`-Version` и `-Ref` нельзя передавать вместе. При ошибке GitHub API (в том числе
+лимите запросов) установка остановится с пояснением; можно повторить позже
+или указать известный тег через `-Ref`.
 
 Установка сама по себе ни один проект не включает.
 
@@ -86,8 +102,10 @@ Codex, Claude Code, Node.js, Python и Java не нужны. Платформа 
 | `status` | Показывает активную установку, хук и файлы проекта (`-Path`). |
 | `uninstall` | Удаляет установку и хук с компьютера. Файлы проектов не трогает. |
 
-`update` без `-Ref` снова берёт `main`, а не ту ветку, которая была установлена
-раньше. Режим MCP и `-ExpandPaths` сохраняются, если эти параметры не указаны.
+`update` предлагает тот же выбор версий, что и `install`; установленный ранее
+RC не выбирается автоматически. Для обновления без меню используйте
+`update -Version stable` или точный тег RC. Режим MCP и `-ExpandPaths`
+сохраняются, если эти параметры не указаны.
 Повторная установка той же версии, коммита, режима и признака путей использует
 уже собранный каталог.
 
@@ -95,7 +113,8 @@ Codex, Claude Code, Node.js, Python и Java не нужны. Платформа 
 
 | Параметр | Команды | Назначение |
 | --- | --- | --- |
-| `-Ref <ref>` | `install`, `update` | Ветка, тег или коммит. По умолчанию `main`. |
+| `-Version stable` или `-Version <тег>` | `install`, `update` | Последняя стабильная или точный тег доступного RC. Без `-Version` и `-Ref` — меню выбора. |
+| `-Ref <ref>` | `install`, `update` | Ручной выбор ветки, тега или коммита marketplace, без меню. Несовместим с `-Version`. |
 | `-McpMode roots` или `-McpMode project` | `install`, `update` | Способ передать Unica рабочую папку. По умолчанию `roots`; при `update` сохраняется текущий режим. |
 | `-Prefetch` | `install`, `update` | Сразу скачать ядро и все движки. |
 | `-ExpandPaths` | `install`, `update` | Подставить в описание сервера абсолютные пути вместо `${userHome}` и `${CURSOR_PLUGIN_ROOT}`. Если при `update` параметр не указан, остаётся значение текущей установки. Выключить подстановку: `-ExpandPaths:$false`. |
@@ -235,6 +254,8 @@ Cursor запускает `<установка>\cursor\unica-cursor-shim.exe`, �
 
 ```powershell
 .\unica-cursor.cmd update
+.\unica-cursor.cmd update -Version stable
+.\unica-cursor.cmd update -Version v0.15.0-rc.1
 .\unica-cursor.cmd update -Ref v0.13.1
 .\unica-cursor.cmd rollback
 ```
@@ -257,6 +278,26 @@ Cursor запускает `<установка>\cursor\unica-cursor-shim.exe`, �
 Cursor не запустил второй, неадаптированный сервер. В режиме `roots` рабочее
 описание сервера — файл `mcp.json` установки. В режиме `project` его нет:
 сервер живёт в `.cursor/mcp.json` проекта.
+
+## Проверка адаптера
+
+Проверки выбора версий без сети (Windows PowerShell 5.1):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/release-selection.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/release-api.ps1
+```
+
+Отдельная проверка с доступом к GitHub устанавливает стабильную версию,
+обновляет её до `v0.15.0-rc.1` и делает откат во временном профиле:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/install-releases.ps1
+```
+
+Она не запускает Cursor и сервер Unica. Пример RC должен оставаться доступным
+после текущей стабильной версии; при выпуске новой стабильной версии обновите
+тег в этом тесте. Временный профиль удаляется после проверки.
 
 ## Удаление
 

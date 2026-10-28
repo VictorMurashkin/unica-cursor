@@ -12,3 +12,6 @@ ConfigDumpInfo.xml
 DumpFilesIndex.txt
 .cursor/
 tests/*
+!tests/release-selection.ps1
+!tests/release-api.ps1
+!tests/install-releases.ps1
