@@ -556,10 +556,12 @@ function Get-UnicaWorkspaceView([string]$InstallDir, [string]$ProjectRoot) {
         throw 'The active installation has no Cursor shim. Run "unica-cursor.ps1 update" first.'
     }
     $bootstrap = Join-Path $InstallDir $script:BootstrapRelPath
+    # Windows PowerShell 5.1 does not escape a trailing backslash in quoted native arguments.
+    $projectArgument = [IO.Path]::GetFullPath([IO.Path]::Combine($ProjectRoot, '.'))
     $outFile = Join-Path ([System.IO.Path]::GetTempPath()) ('unica-view-' + [guid]::NewGuid().ToString('N') + '.json')
     try {
         Invoke-WithUnicaEnv @{ CLAUDE_PROJECT_DIR = $ProjectRoot } {
-            & $shim --setup $ProjectRoot $outFile $bootstrap run --plugin-root $InstallDir | Out-Host
+            & $shim --setup $projectArgument $outFile $bootstrap run --plugin-root $InstallDir | Out-Host
         }
         if ($LASTEXITCODE -ne 0) { throw "unica-cursor-shim --setup exited with code $LASTEXITCODE" }
         $view = Read-JsonFile $outFile

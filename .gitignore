@@ -16,3 +16,4 @@ tests/*
 !tests/release-api.ps1
 !tests/install-releases.ps1
 !tests/install-prefetch.ps1
+!tests/enable-workspace.ps1
