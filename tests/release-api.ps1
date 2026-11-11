@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $adapter = Join-Path (Split-Path -Parent $PSScriptRoot) 'unica-cursor.ps1'
 $tokens = $null
 $errors = $null
@@ -26,6 +26,6 @@ $choices = @(Get-ReleaseChoices $releases)
 if ($choices.Count -ne 1 -or $choices[0].tag_name -ne 'v0.13.0') { throw 'Stable on second page was lost' }
 function Invoke-RestMethod { throw 'Simulated API rate limit' }
 try { Get-UnicaReleases; throw 'Expected API failure' } catch {
-    if ($_.Exception.Message -notmatch 'Cannot load Unica releases.*Simulated API rate limit') { throw }
+    if ($_.Exception.Message -notmatch 'Не удалось загрузить список релизов Unica.*Simulated API rate limit') { throw }
 }
 Write-Host 'release API pagination and failures: ok'

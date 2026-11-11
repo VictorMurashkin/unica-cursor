@@ -1,4 +1,4 @@
-# Offline behavior checks. Run with Windows PowerShell 5.1.
+﻿# Offline behavior checks. Run with Windows PowerShell 5.1.
 $ErrorActionPreference = 'Stop'
 $adapter = Join-Path (Split-Path -Parent $PSScriptRoot) 'unica-cursor.ps1'
 $tokens = $null
@@ -38,16 +38,16 @@ $script:releases = @(
 if (-not (Get-Command Get-ReleaseChoices -ErrorAction SilentlyContinue)) { throw 'Missing release selection feature: Get-ReleaseChoices' }
 $choices = @(Get-ReleaseChoices $script:releases)
 Assert-Equal (($choices | ForEach-Object { $_.tag_name }) -join ',') 'v0.13.0,v0.15.0-rc.10,v0.15.0-rc.2,v0.14.0-rc.1' 'Stable first, only newer published RCs, numeric ordering'
-Assert-Throws { Get-ReleaseChoices @((Release 'v0.15.0-rc.1' '2026-10-26T10:00:00Z')) } 'stable'
+Assert-Throws { Get-ReleaseChoices @((Release 'v0.15.0-rc.1' '2026-10-26T10:00:00Z')) } 'стабильный релиз'
 Assert-Equal (@(Get-ReleaseChoices @((Release 'v0.13.0' '2026-10-09T10:00:00Z' $false))).Count) 1 'Stable without RCs'
 $afterStable = @(Get-ReleaseChoices ($script:releases + @((Release 'v0.14.0' '2026-10-23T10:00:00Z' $false))))
 Assert-Equal (($afterStable | ForEach-Object { $_.tag_name }) -join ',') 'v0.14.0,v0.15.0-rc.10,v0.15.0-rc.2' 'New stable removes superseded RCs'
 function Get-UnicaReleases { return $script:releases }
 Assert-Equal (Resolve-InstallRef 'stable' '') 'v0.13.0' 'Explicit stable'
 Assert-Equal (Resolve-InstallRef 'v0.14.0-rc.1' '') 'v0.14.0-rc.1' 'Exact published RC'
-Assert-Throws { Resolve-InstallRef 'v0.13.0-rc.7' '' } 'available'
-Assert-Throws { Resolve-InstallRef 'stable' 'next' } 'together'
-Assert-Throws { Resolve-InstallRef '' '--bad' } 'Invalid'
+Assert-Throws { Resolve-InstallRef 'v0.13.0-rc.7' '' } 'недоступна'
+Assert-Throws { Resolve-InstallRef 'stable' 'next' } 'одновременно'
+Assert-Throws { Resolve-InstallRef '' '--bad' } 'Недопустимое значение'
 function Get-UnicaReleases { throw 'API must not be used for -Ref' }
 Assert-Equal (Resolve-InstallRef '' 'next') 'next' 'Legacy Ref bypasses release API'
 function Get-UnicaReleases { return $script:releases }
@@ -60,5 +60,5 @@ $script:answers.Enqueue('999')
 $script:answers.Enqueue('4')
 Assert-Equal (Resolve-InstallRef '' '') 'v0.14.0-rc.1' 'Menu retries invalid input and selects numbered RC'
 function Read-Host { throw 'NonInteractive host' }
-Assert-Throws { Resolve-InstallRef '' '' } 'Use -Version stable'
+Assert-Throws { Resolve-InstallRef '' '' } 'укажите -Version stable'
 Write-Host 'release selection: ok'

@@ -1,35 +1,30 @@
-<#
+﻿<#
 .SYNOPSIS
-  Installs Unica (https://github.com/IngvarConsulting/unica) into Cursor and
-  enables it per project through a marker file.
+  Устанавливает Unica для Cursor и подключает её к отдельным проектам.
 
 .DESCRIPTION
-  Commands:
+  Команды
     install   [-Version stable|vX.Y.Z-rc.N | -Ref <ref>] [-McpMode roots|project] [-Prefetch] [-ExpandPaths] [-Force]
-    update    same parameters as install
+    update    с теми же параметрами, что и install
     rollback
-    enable    [-Path <project>] [-NoWorkspaceConfig] [-NoRule] [-Force]
-    disable   [-Path <project>]
-    status    [-Path <project>]
+    enable    [-Path <папка проекта>] [-NoWorkspaceConfig] [-NoRule] [-Force]
+    disable   [-Path <папка проекта>]
+    status    [-Path <папка проекта>]
     uninstall [-KeepCache]
 
-  Every installed version lives in its own immutable directory under
-  ~/.cursor/unica/installs. active.json points to the current and the previous
-  installation. A global workspaceOpen hook (~/.cursor/hooks.json) loads the
-  active installation only for windows whose FIRST workspace root contains
-  .cursor/unica.enabled.
+  Скрипт хранит версии в отдельных каталогах ~/.cursor/unica/installs.
+  Файл active.json указывает на активную и предыдущую установки. Обработчик
+  workspaceOpen подключает Unica, если в первой папке рабочей области есть
+  маркер .cursor/unica.enabled.
 
-  Cursor talks to Unica through unica-cursor-shim.exe (templates/cursor-shim.cs,
-  compiled into every installation): it fixes how Cursor deviates from the MCP
-  spec. enable also writes v8project.yaml from the configuration Unica detects,
-  a v8project.local.yaml.example for the infobase connection, portable .gitignore
-  rules for Unica generated paths, and the agent rule .cursor/rules/unica.mdc.
+  Cursor обращается к Unica через адаптер unica-cursor-shim.exe. Команда enable
+  создаёт настройки проекта v8project.yaml, образец подключения к базе
+  v8project.local.yaml.example, записи в .gitignore и правило агента
+  .cursor/rules/unica.mdc.
 
-  See README.md and docs/usage.md.
-
-  NOTE: keep this file ASCII-only. Windows PowerShell 5.1 reads BOM-less
-  files in the ANSI code page, which corrupts non-ASCII characters.
+  Подробности в README.md и docs/usage.md.
 #>
+# Keep the UTF-8 BOM so Windows PowerShell 5.1 reads the Russian text correctly.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
@@ -42,7 +37,7 @@ param(
     # Latest stable or an exact published RC newer than stable. Omit to show a menu.
     [string]$Version,
 
-    # roots: MCP server inside the plugin (default). project: server in <project>/.cursor/mcp.json.
+    # roots: MCP server inside the plugin (default). project: server in <папка проекта>/.cursor/mcp.json.
     [ValidateSet('roots', 'project')]
     [string]$McpMode,
 
@@ -76,7 +71,7 @@ try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } 
 # ----------------------------------------------------------------------------
 # Constants and paths
 # ----------------------------------------------------------------------------
-$script:AdapterVersion = 2
+$script:AdapterVersion = 3
 $script:MinVersion = '0.13.0-rc.6'
 $script:MarketplaceUrl = 'https://github.com/IngvarConsulting/unica-marketplace'
 $script:HookScriptName = 'unica-workspace.ps1'
@@ -102,7 +97,7 @@ $script:GeneratedGitIgnorePatterns = @(
 $script:RuleBlockPattern = '(?s)<!-- unica-cursor:begin.*?<!-- unica-cursor:end -->'
 
 if ([string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
-    throw 'USERPROFILE is not set.'
+    throw 'Переменная USERPROFILE не задана.'
 }
 $CursorHome = Join-Path $env:USERPROFILE '.cursor'
 $UnicaHome = Join-Path $CursorHome 'unica'
@@ -123,7 +118,7 @@ $HookTemplate = Join-Path (Join-Path $PSScriptRoot 'hooks') $script:HookScriptNa
 # ----------------------------------------------------------------------------
 function Write-Step([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 function Write-Info([string]$Message) { Write-Host "    $Message" }
-function Write-Warn([string]$Message) { Write-Host "WARNING: $Message" -ForegroundColor Yellow }
+function Write-Warn([string]$Message) { Write-Host "ПРЕДУПРЕЖДЕНИЕ: $Message" -ForegroundColor Yellow }
 
 function Write-InstallLog([string]$Message) {
     try {
@@ -138,8 +133,8 @@ function Write-InstallLog([string]$Message) {
 
 function Confirm-Action([string]$Prompt) {
     if ($Force) { return $true }
-    $answer = Read-Host "$Prompt [y/N]"
-    return ($answer -match '^(y|yes)$')
+    $answer = Read-Host "$Prompt [д/Н]"
+    return ($answer -match '^(д|да|y|yes)$')
 }
 
 # ----------------------------------------------------------------------------
@@ -165,7 +160,7 @@ function Read-JsonFile([string]$File) {
         return ($text | ConvertFrom-Json)
     }
     catch {
-        throw "Cannot parse JSON file '$File': $($_.Exception.Message)"
+        throw "Не удалось прочитать файл JSON '$File': $($_.Exception.Message)"
     }
 }
 
@@ -195,22 +190,22 @@ function Test-JsonProp($Object, [string]$Name) {
 # ----------------------------------------------------------------------------
 function Assert-Environment {
     if ($env:OS -ne 'Windows_NT') {
-        throw 'This script supports Windows x64 only.'
+        throw 'Скрипт поддерживает только Windows x64.'
     }
     $arch = $env:PROCESSOR_ARCHITECTURE
     if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }
     if ($arch -ne 'AMD64') {
-        throw "Unsupported processor architecture '$arch'. Unica bootstrap for Windows is win-x64 only."
+        throw "Архитектура процессора '$arch' не поддерживается. Загрузчик Unica для Windows доступен только для win-x64."
     }
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-        throw 'git was not found in PATH. Install Git for Windows first.'
+        throw 'Git не найден в PATH. Сначала установите Git для Windows.'
     }
 }
 
 function Invoke-Git([string[]]$GitArgs) {
     & git @GitArgs | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw ("git {0} failed with exit code {1}" -f ($GitArgs -join ' '), $LASTEXITCODE)
+        throw ("git {0} завершился с кодом {1}" -f ($GitArgs -join ' '), $LASTEXITCODE)
     }
 }
 
@@ -279,7 +274,7 @@ function Get-UnicaReleases {
             $batch = @($response)
         }
         catch {
-            throw "Cannot load Unica releases from GitHub (check network access and API rate limits). Retry later or use -Ref with a known marketplace tag. $($_.Exception.Message)"
+            throw "Не удалось загрузить список релизов Unica с GitHub. Проверьте доступ к сети и лимиты API. Повторите позже или укажите известный тег через -Ref. $($_.Exception.Message)"
         }
         $batch
         $page++
@@ -294,7 +289,7 @@ function Get-ReleaseChoices([object[]]$Releases) {
             $stable = $release
         }
     }
-    if (-not $stable) { throw 'GitHub returned no published stable Unica release.' }
+    if (-not $stable) { throw 'На GitHub не найден опубликованный стабильный релиз Unica.' }
 
     $candidates = New-Object 'System.Collections.Generic.List[object]'
     $stableVersion = ConvertTo-SemVer $stable.tag_name
@@ -314,8 +309,8 @@ function Get-ReleaseChoices([object[]]$Releases) {
 
 function Resolve-InstallRef([string]$RequestedVersion, [string]$RequestedRef) {
     if ($RequestedRef) {
-        if ($RequestedVersion) { throw '-Version and -Ref cannot be used together.' }
-        if ($RequestedRef -notmatch '^[A-Za-z0-9][A-Za-z0-9._/\-]*$') { throw "Invalid -Ref value '$RequestedRef'." }
+        if ($RequestedVersion) { throw 'Параметры -Version и -Ref нельзя использовать одновременно.' }
+        if ($RequestedRef -notmatch '^[A-Za-z0-9][A-Za-z0-9._/\-]*$') { throw "Недопустимое значение -Ref '$RequestedRef'." }
         return $RequestedRef
     }
     $choices = @(Get-ReleaseChoices @(Get-UnicaReleases))
@@ -323,25 +318,25 @@ function Resolve-InstallRef([string]$RequestedVersion, [string]$RequestedRef) {
         if ($RequestedVersion -eq 'stable') { return [string]$choices[0].tag_name }
         $selected = @($choices | Where-Object { $_.tag_name -ceq $RequestedVersion })
         if ($selected.Count -eq 0) {
-            throw "Version '$RequestedVersion' is not available. Choose stable or one of: $(($choices | ForEach-Object { $_.tag_name }) -join ', ')."
+            throw "Версия '$RequestedVersion' недоступна. Укажите stable или один из тегов: $(($choices | ForEach-Object { $_.tag_name }) -join ', ')."
         }
         return [string]$selected[0].tag_name
     }
-    Write-Step 'Choose a Unica version'
+    Write-Step 'Выберите версию Unica'
     for ($i = 0; $i -lt $choices.Count; $i++) {
-        $label = 'RC (pre-release)'
-        if ($i -eq 0) { $label = 'latest stable, default' }
+        $label = 'кандидат в релиз'
+        if ($i -eq 0) { $label = 'последний стабильный релиз, по умолчанию' }
         Write-Info ("{0}. {1} ({2})" -f ($i + 1), $choices[$i].tag_name, $label)
     }
     do {
-        try { $answer = Read-Host 'Version number [1]' }
-        catch { throw 'Cannot read version selection. Use -Version stable or -Version vX.Y.Z-rc.N for unattended installation.' }
+        try { $answer = Read-Host 'Номер версии [1]' }
+        catch { throw 'Не удалось прочитать номер версии. Для установки без ввода укажите -Version stable или -Version vX.Y.Z-rc.N.' }
         if ([string]::IsNullOrWhiteSpace($answer)) { return [string]$choices[0].tag_name }
         $number = 0
         if ([int]::TryParse($answer, [ref]$number) -and $number -ge 1 -and $number -le $choices.Count) {
             return [string]$choices[$number - 1].tag_name
         }
-        Write-Warn "Enter a number from 1 to $($choices.Count)."
+        Write-Warn "Введите число от 1 до $($choices.Count)."
     } while ($true)
 }
 
@@ -394,7 +389,7 @@ function Remove-CurrentLink {
         [System.IO.Directory]::Delete($CurrentLink)
     }
     else {
-        throw "'$CurrentLink' exists and is not a junction. Remove it manually."
+        throw "Путь '$CurrentLink' уже занят. Удалите его вручную, чтобы создать ссылку на каталог."
     }
 }
 
@@ -418,11 +413,11 @@ function Remove-OldInstalls([string]$Current, [string]$Previous) {
         if ($dir.Name -eq $Current -or $dir.Name -eq $Previous) { continue }
         try {
             Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction Stop
-            Write-InstallLog "removed old installation $($dir.Name)"
+            Write-InstallLog "Удалена старая установка $($dir.Name)"
         }
         catch {
-            Write-InstallLog "could not remove $($dir.Name) (in use?): $($_.Exception.Message)"
-            Write-Warn "Could not remove old installation '$($dir.Name)' (probably in use). It will be removed on the next run."
+            Write-InstallLog "Не удалось удалить $($dir.Name), каталог может использоваться: $($_.Exception.Message)"
+            Write-Warn "Не удалось удалить старую установку '$($dir.Name)'. Возможно, она используется. Скрипт повторит попытку при следующем запуске."
         }
     }
 }
@@ -463,8 +458,8 @@ function Test-McpCompatibility([string]$PackageMcpFile) {
     $expectedFile = Join-Path $TemplatesDir 'upstream-mcp.json'
     $expected = Read-JsonFile $expectedFile
     $actual = Read-JsonFile $PackageMcpFile
-    if ($null -eq $expected) { throw "Missing reference file: $expectedFile" }
-    if ($null -eq $actual) { throw "The package has no .mcp.json: $PackageMcpFile" }
+    if ($null -eq $expected) { throw "Эталонный файл не найден: $expectedFile" }
+    if ($null -eq $actual) { throw "В пакете отсутствует .mcp.json: $PackageMcpFile" }
 
     $expectedLines = @(Get-McpLines $expected)
     $actualLines = @(Get-McpLines $actual)
@@ -475,19 +470,19 @@ function Test-McpCompatibility([string]$PackageMcpFile) {
         $oldT = $expected.mcpServers.$serverName.startup_timeout_sec
         $newT = $actual.mcpServers.$serverName.startup_timeout_sec
         if ($oldT -ne $newT) {
-            Write-Info "startup_timeout_sec changed: $oldT -> $newT (informational, Cursor ignores it)"
+            Write-Info "Изменилось значение startup_timeout_sec: $oldT -> $newT (Cursor игнорирует этот параметр)"
         }
     }
 
     if ($diff.Count -eq 0) { return $true }
 
     Write-Host ''
-    Write-Host 'The upstream launch contract (.mcp.json) differs from templates/upstream-mcp.json:' -ForegroundColor Yellow
+    Write-Host 'Настройки запуска в .mcp.json пакета отличаются от templates/upstream-mcp.json:' -ForegroundColor Yellow
     foreach ($d in $diff) {
         if ($d.SideIndicator -eq '<=') { Write-Host "  - $($d.InputObject)" -ForegroundColor Red }
         else { Write-Host "  + $($d.InputObject)" -ForegroundColor Green }
     }
-    Write-Host '  ("-" = expected by the adapter, "+" = found in the package)'
+    Write-Host '  ("-" — ожидает адаптер, "+" — найдено в пакете)'
     Write-Host ''
     return $false
 }
@@ -518,7 +513,7 @@ function Get-ProjectServerEntry([bool]$Expand) {
 function Build-Shim([string]$InstallRoot) {
     $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
     if (-not (Test-Path -LiteralPath $csc -PathType Leaf)) {
-        throw "The .NET Framework 4 C# compiler was not found: $csc. It is needed to build the Cursor shim."
+        throw "Не найден компилятор C# из .NET Framework 4: $csc. Он нужен для сборки адаптера Cursor."
     }
     $source = Join-Path $TemplatesDir 'cursor-shim.cs'
     $exe = Join-Path $InstallRoot $script:ShimRelPath
@@ -526,7 +521,7 @@ function Build-Shim([string]$InstallRoot) {
     if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $output = & $csc /nologo /optimize+ /target:exe /r:System.Web.Extensions.dll "/out:$exe" $source 2>&1
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exe -PathType Leaf)) {
-        throw ("Building the Cursor shim failed (csc exit code {0}):`n{1}" -f $LASTEXITCODE, (($output | Out-String).Trim()))
+        throw ("Не удалось собрать адаптер Cursor (код завершения csc: {0}):`n{1}" -f $LASTEXITCODE, (($output | Out-String).Trim()))
     }
 }
 
@@ -553,7 +548,7 @@ function Invoke-WithUnicaEnv([hashtable]$Extra, [scriptblock]$Body) {
 function Get-UnicaWorkspaceView([string]$InstallDir, [string]$ProjectRoot) {
     $shim = Join-Path $InstallDir $script:ShimRelPath
     if (-not (Test-Path -LiteralPath $shim -PathType Leaf)) {
-        throw 'The active installation has no Cursor shim. Run "unica-cursor.ps1 update" first.'
+        throw 'В активной установке отсутствует адаптер Cursor. Выполните "unica-cursor.ps1 update".'
     }
     $bootstrap = Join-Path $InstallDir $script:BootstrapRelPath
     # Windows PowerShell 5.1 does not escape a trailing backslash in quoted native arguments.
@@ -563,9 +558,9 @@ function Get-UnicaWorkspaceView([string]$InstallDir, [string]$ProjectRoot) {
         Invoke-WithUnicaEnv @{ CLAUDE_PROJECT_DIR = $ProjectRoot } {
             & $shim --setup $projectArgument $outFile $bootstrap run --plugin-root $InstallDir | Out-Host
         }
-        if ($LASTEXITCODE -ne 0) { throw "unica-cursor-shim --setup exited with code $LASTEXITCODE" }
+        if ($LASTEXITCODE -ne 0) { throw "unica-cursor-shim --setup завершился с кодом $LASTEXITCODE" }
         $view = Read-JsonFile $outFile
-        if ($null -eq $view) { throw 'Unica returned an empty answer to unica.view {}.' }
+        if ($null -eq $view) { throw 'Unica вернула пустой ответ на unica.view {}.' }
         return $view
     }
     finally {
@@ -575,13 +570,13 @@ function Get-UnicaWorkspaceView([string]$InstallDir, [string]$ProjectRoot) {
 
 function New-WorkspaceConfig([string]$InstallDir, [string]$ProjectRoot) {
     $file = Join-Path $ProjectRoot $script:WorkspaceConfigName
-    Write-Step "Asking Unica for the workspace configuration (the first run downloads the Unica core)"
+    Write-Step "Запрашиваем у Unica настройки проекта (при первом запуске загружается ядро Unica)"
     try {
         $view = Get-UnicaWorkspaceView $InstallDir $ProjectRoot
     }
     catch {
-        Write-Warn "Could not get the workspace configuration from Unica: $($_.Exception.Message)"
-        Write-Info 'Rerun enable later, or ask the agent: it calls unica.view {} and writes the content of "setup".'
+        Write-Warn "Не удалось получить настройки проекта от Unica: $($_.Exception.Message)"
+        Write-Info 'Повторите enable позже или попросите агента вызвать unica.view {} и сохранить содержимое "setup".'
         return
     }
     $setup = $null
@@ -589,17 +584,17 @@ function New-WorkspaceConfig([string]$InstallDir, [string]$ProjectRoot) {
     $content = $null
     if ($setup -and (Test-JsonProp $setup 'content')) { $content = [string]$setup.content }
     if ([string]::IsNullOrWhiteSpace($content)) {
-        Write-Warn "Unica did not propose a $($script:WorkspaceConfigName): $($view.summary)"
+        Write-Warn "Unica не предложила содержимое для $($script:WorkspaceConfigName): $($view.summary)"
         if ($setup -and $setup.reason) { Write-Info $setup.reason }
-        Write-Info "Add the 1C sources (Designer XML or EDT) to the project and rerun enable."
+        Write-Info "Добавьте в проект исходники 1С (XML Конфигуратора или EDT) и повторите enable."
         return
     }
     Write-TextFile $file $content
-    Write-Host "Workspace configuration created: $file" -ForegroundColor Green
+    Write-Host "Создан файл настроек проекта: $file" -ForegroundColor Green
     foreach ($set in @($view.data.sourceSets)) {
-        if ($set) { Write-Info ("  {0}: {1} at {2} ({3})" -f $set.name, $set.kind, $set.path, $set.sourceFormat) }
+        if ($set) { Write-Info ("  {0}: {1}, путь {2} ({3})" -f $set.name, $set.kind, $set.path, $set.sourceFormat) }
     }
-    Write-Info 'Check it in Cursor with unica.check {}. Machine-specific settings (infobase) go to v8project.local.yaml.'
+    Write-Info 'Проверьте проект в Cursor вызовом unica.check {}. Настройки подключения к базе укажите в v8project.local.yaml.'
 }
 
 # ----------------------------------------------------------------------------
@@ -616,7 +611,7 @@ function Test-HookRegistered {
 
 function Register-Hook {
     if (-not (Test-Path -LiteralPath $HookTemplate -PathType Leaf)) {
-        throw "Hook script template not found: $HookTemplate"
+        throw "Шаблон обработчика workspaceOpen не найден: $HookTemplate"
     }
     if (-not (Test-Path -LiteralPath $HooksDir)) {
         New-Item -ItemType Directory -Path $HooksDir -Force | Out-Null
@@ -670,7 +665,7 @@ function Resolve-ProjectPath {
     $target = $Path
     if ([string]::IsNullOrWhiteSpace($target)) { $target = (Get-Location).ProviderPath }
     if (-not (Test-Path -LiteralPath $target -PathType Container)) {
-        throw "Project directory not found: $target"
+        throw "Папка проекта не найдена: $target"
     }
     return (Resolve-Path -LiteralPath $target).ProviderPath
 }
@@ -692,7 +687,7 @@ function Set-ProjectRule([string]$ProjectRoot) {
     $file = Get-RuleFile $ProjectRoot
     $template = (Read-TextFile (Join-Path $TemplatesDir 'unica-rule.mdc')).Replace("`r`n", "`n")
     $block = [regex]::Match($template, $script:RuleBlockPattern).Value
-    if (-not $block) { throw 'templates/unica-rule.mdc has no unica-cursor:begin/end block.' }
+    if (-not $block) { throw 'В templates/unica-rule.mdc отсутствует блок unica-cursor:begin/end.' }
 
     if (-not (Test-Path -LiteralPath $file)) {
         Write-TextFile $file $template
@@ -736,16 +731,16 @@ function Remove-ProjectRule([string]$ProjectRoot) {
 function New-LocalConfigExample([string]$ProjectRoot) {
     $file = Join-Path $ProjectRoot $script:LocalExampleName
     if (Test-Path -LiteralPath $file) {
-        Write-Info "$($script:LocalExampleName) already exists; left untouched."
+        Write-Info "$($script:LocalExampleName) уже существует."
         return
     }
     Copy-Item -LiteralPath (Join-Path $TemplatesDir $script:LocalExampleName) -Destination $file
-    Write-Host "Infobase connection example created: $file" -ForegroundColor Green
+    Write-Host "Создан пример подключения к информационной базе: $file" -ForegroundColor Green
     if (Test-Path -LiteralPath (Join-Path $ProjectRoot $script:LocalConfigName)) {
-        Write-Info "$($script:LocalConfigName) already exists: compare it with the example if the infobase is not found."
+        Write-Info "$($script:LocalConfigName) уже существует. Если Unica не найдёт базу, сравните настройки с примером."
     }
     else {
-        Write-Info "To connect an infobase: copy it to $($script:LocalConfigName) and fill in the connection."
+        Write-Info "Чтобы подключить базу, скопируйте пример в $($script:LocalConfigName) и заполните параметры подключения."
     }
 }
 
@@ -759,7 +754,7 @@ function Add-GitIgnoreEntry([string]$ProjectRoot, [string]$Entry) {
     }
     if ($text -and -not $text.EndsWith("`n")) { $text += "`n" }
     Write-TextFile $file ($text + "/$Entry`n")
-    Write-Info "Added /$Entry to $file"
+    Write-Info "В $file добавлена строка /$Entry"
 }
 
 # Adds the portable ignore rules Unica checks (.build/ cache, root /build/*
@@ -781,7 +776,7 @@ function Add-GeneratedGitIgnore([string]$ProjectRoot) {
     if ($missing.Count -eq 0) { return }
     if ($text -and -not $text.EndsWith("`n")) { $text += "`n" }
     Write-TextFile $file ($text + (($missing -join "`n") + "`n"))
-    Write-Info ("Added to {0}: {1}" -f $file, ($missing -join ', '))
+    Write-Info ("Добавлено в {0}: {1}" -f $file, ($missing -join ', '))
 }
 
 function Test-OurServerEntry($Entry) {
@@ -796,7 +791,7 @@ function Add-ProjectMcpEntry([string]$ProjectRoot, $Entry) {
     if ($null -eq $doc) { $doc = [pscustomobject]@{} }
     if (Test-JsonProp $doc 'mcpServers') {
         if ((Test-JsonProp $doc.mcpServers $script:ProjectServerName) -and -not (Test-OurServerEntry $doc.mcpServers.($script:ProjectServerName)) -and -not $Force) {
-            throw "'$file' already contains a different MCP server named '$($script:ProjectServerName)'. Use -Force to replace it."
+            throw "В '$file' уже настроен другой MCP-сервер с именем '$($script:ProjectServerName)'. Для замены укажите -Force."
         }
     }
     else {
@@ -813,7 +808,7 @@ function Remove-ProjectMcpEntry([string]$ProjectRoot) {
     if ($null -eq $doc -or -not (Test-JsonProp $doc 'mcpServers')) { return $false }
     if (-not (Test-JsonProp $doc.mcpServers $script:ProjectServerName)) { return $false }
     if (-not (Test-OurServerEntry $doc.mcpServers.($script:ProjectServerName))) {
-        Write-Warn "The '$($script:ProjectServerName)' server in '$file' was not created by this adapter; left untouched."
+        Write-Warn "В '$file' сохранена сторонняя настройка сервера '$($script:ProjectServerName)'."
         return $false
     }
     Copy-Item -LiteralPath $file -Destination "$file.bak" -Force
@@ -837,7 +832,7 @@ function Invoke-Install {
 
     foreach ($required in 'plugin.json', 'mcp.json', 'project-mcp.json', 'upstream-mcp.json', 'cursor-shim.cs') {
         if (-not (Test-Path -LiteralPath (Join-Path $TemplatesDir $required))) {
-            throw "Template not found: $(Join-Path $TemplatesDir $required)"
+            throw "Шаблон не найден: $(Join-Path $TemplatesDir $required)"
         }
     }
 
@@ -863,10 +858,10 @@ function Invoke-Install {
     }
 
     # 1. Source clone ---------------------------------------------------------
-    Write-Step "Fetching unica-marketplace ($requestedRef)"
+    Write-Step "Загружаем данные из unica-marketplace ($requestedRef)"
     if (-not (Test-Path -LiteralPath (Join-Path $SourceDir '.git'))) {
         if ((Test-Path -LiteralPath $SourceDir) -and @(Get-ChildItem -LiteralPath $SourceDir -Force).Count -gt 0) {
-            throw "'$SourceDir' exists but is not a git clone. Remove it and retry."
+            throw "Папка '$SourceDir' существует и не является копией репозитория Git. Удалите её и повторите попытку."
         }
         $cloned = $false
         try {
@@ -874,7 +869,7 @@ function Invoke-Install {
             $cloned = $true
         }
         catch {
-            Write-Warn 'Partial clone failed, retrying with a full clone.'
+            Write-Warn 'Частичное клонирование не удалось. Повторяем с полной загрузкой репозитория.'
             if (Test-Path -LiteralPath $SourceDir) { Remove-Item -LiteralPath $SourceDir -Recurse -Force }
         }
         if (-not $cloned) {
@@ -889,18 +884,18 @@ function Invoke-Install {
 
     $marketCommit = Resolve-Commit $requestedRef
     if (-not $marketCommit) {
-        throw "Ref '$requestedRef' was not found in unica-marketplace."
+        throw "В unica-marketplace не найдена ссылка '$requestedRef'."
     }
     Invoke-Git @('-C', $SourceDir, 'checkout', '--quiet', '--detach', '--force', $marketCommit)
 
     # 2. Package ref (like Codex / Claude Code do) -----------------------------
     $marketplace = Read-JsonFile (Join-Path $SourceDir '.claude-plugin\marketplace.json')
     if ($null -eq $marketplace) {
-        throw "'.claude-plugin/marketplace.json' not found at '$requestedRef'. The marketplace layout may have changed."
+        throw "В '$requestedRef' не найден файл .claude-plugin/marketplace.json. Возможно, изменилась структура каталога пакетов."
     }
     $entry = @($marketplace.plugins | Where-Object { $_.name -eq 'unica' }) | Select-Object -First 1
     if ($null -eq $entry) {
-        throw "Plugin 'unica' is not listed in marketplace.json at '$requestedRef'."
+        throw "В marketplace.json для '$requestedRef' не указан плагин 'unica'."
     }
 
     $source = $entry.source
@@ -909,71 +904,71 @@ function Invoke-Install {
     $subPath = $null
     if ($source -is [string]) {
         $subPath = $source
-        $packageRef = '(marketplace checkout)'
+        $packageRef = '(копия unica-marketplace)'
     }
     elseif ($source -and $source.source -eq 'git-subdir' -and ([string]$source.url) -match 'IngvarConsulting/unica-marketplace(\.git)?/?$') {
         if (-not $source.ref -or -not $source.path) {
-            throw "marketplace.json: git-subdir source without 'ref' or 'path'."
+            throw "В marketplace.json у источника git-subdir отсутствует поле 'ref' или 'path'."
         }
         $packageRef = [string]$source.ref
         $subPath = [string]$source.path
         $packageCommit = Resolve-Commit $packageRef
         if (-not $packageCommit) {
-            throw "Package ref '$packageRef' from marketplace.json was not found in the repository."
+            throw "Ссылка '$packageRef' из marketplace.json не найдена в репозитории."
         }
         if ($packageCommit -ne $marketCommit) {
             Invoke-Git @('-C', $SourceDir, 'checkout', '--quiet', '--detach', '--force', $packageCommit)
         }
     }
     else {
-        throw 'Unsupported plugin source format in marketplace.json. The marketplace layout changed; review the adapter before installing.'
+        throw 'Формат источника плагина в marketplace.json не поддерживается. Проверьте совместимость адаптера с каталогом пакетов.'
     }
 
     $subPath = $subPath.Trim().TrimStart('.', '/', '\').Replace('/', '\')
     if ([string]::IsNullOrWhiteSpace($subPath) -or $subPath -match '(^|\\)\.\.(\\|$)' -or [System.IO.Path]::IsPathRooted($subPath)) {
-        throw "Unsafe package path in marketplace.json: '$subPath'."
+        throw "Недопустимый путь к пакету в marketplace.json: '$subPath'."
     }
     $packageDir = Join-Path $SourceDir $subPath
     if (-not (Test-Path -LiteralPath $packageDir -PathType Container)) {
-        throw "Package directory not found: $packageDir"
+        throw "Каталог пакета не найден: $packageDir"
     }
 
     # 3. Version checks --------------------------------------------------------
     $packageManifest = Read-JsonFile (Join-Path $packageDir '.claude-plugin\plugin.json')
     if ($null -eq $packageManifest -or -not $packageManifest.version) {
-        throw "Cannot read the package version from '.claude-plugin/plugin.json'."
+        throw "Не удалось прочитать версию пакета из .claude-plugin/plugin.json."
     }
     $version = [string]$packageManifest.version
     $semver = ConvertTo-SemVer $version
-    if ($null -eq $semver) { throw "Unrecognised package version '$version'." }
+    if ($null -eq $semver) { throw "Не удалось распознать версию пакета '$version'." }
     $min = ConvertTo-SemVer $script:MinVersion
     if ((Compare-SemVer $semver $min) -lt 0) {
-        throw "Package version $version is not supported. The adapter relies on the host-context mechanism of Unica $($script:MinVersion) and newer."
+        throw "Версия пакета $version не поддерживается. Адаптеру нужна Unica $($script:MinVersion) или новее для передачи настроек от Cursor."
     }
     if ($requestedRef -match '^v\d+\.\d+\.\d+(-[0-9A-Za-z.\-]+)?$') {
         if ($requestedRef.Substring(1) -ne $version) {
-            throw "Tag '$requestedRef' points to a catalog of version $version, not $($requestedRef.Substring(1)). Tags between v0.9.1 and v0.13.0-rc.5 install the previous version; install by branch (-Ref main or -Ref next) instead."
+            throw "Тег '$requestedRef' указывает на пакет версии $version. Теги от v0.9.1 до v0.13.0-rc.5 устанавливают предыдущую версию. Укажите ветку через -Ref main или -Ref next."
         }
     }
-    Write-Info "Package version: $version (ref $packageRef, commit $($packageCommit.Substring(0, 7)))"
+    Write-Info "Версия пакета: $version (ссылка $packageRef, коммит $($packageCommit.Substring(0, 7)))"
 
     # 4. Launch contract compatibility -----------------------------------------
     $packageMcp = Join-Path $packageDir '.mcp.json'
     if (-not (Test-McpCompatibility $packageMcp)) {
         if ($Force) {
-            Write-Warn 'Continuing despite the launch contract change (-Force).'
+            Write-Warn 'Параметр -Force разрешает продолжить с изменёнными настройками запуска.'
         }
         else {
-            throw 'The way Unica is launched has changed. Review templates/mcp.json and templates/project-mcp.json, update templates/upstream-mcp.json, then rerun (or use -Force to install anyway).'
+            throw 'Способ запуска Unica изменился. Проверьте templates/mcp.json и templates/project-mcp.json, обновите templates/upstream-mcp.json и повторите установку. Для установки с текущим шаблоном укажите -Force.'
         }
     }
     $bootstrapExe = Join-Path $packageDir 'bootstrap\bin\win-x64\unica-bootstrap.exe'
     if (-not (Test-Path -LiteralPath $bootstrapExe -PathType Leaf)) {
-        throw "Package has no bootstrap/bin/win-x64/unica-bootstrap.exe (looked in $packageDir)."
+        throw "В пакете $packageDir отсутствует bootstrap/bin/win-x64/unica-bootstrap.exe."
     }
     $launchSh = Join-Path $packageDir 'bootstrap\launch.sh'
     if (-not (Test-Path -LiteralPath $launchSh -PathType Leaf) -or (Read-TextFile $launchSh) -notmatch 'run\s+--plugin-root') {
-        $message = "bootstrap/launch.sh does not call 'run --plugin-root' any more; the bootstrap command line may have changed."
+        $message = "В bootstrap/launch.sh отсутствует вызов 'run --plugin-root'. Возможно, изменились параметры запуска загрузчика."
         if ($Force) { Write-Warn $message } else { throw $message }
     }
 
@@ -985,21 +980,21 @@ function Invoke-Install {
         $existingState = Get-InstallState $installName
         if ($existingState -and $existingState.packageCommit -eq $packageCommit -and $existingState.mcpMode -eq $mode -and $existingState.adapterVersion -eq $script:AdapterVersion) {
             $reuse = $true
-            Write-Step "Installation $installName already exists, reusing it"
+            Write-Step "Используем существующую установку $installName"
         }
         else {
             try { Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction Stop }
-            catch { throw "Incomplete installation '$installName' cannot be removed (in use?). Close Cursor and retry." }
+            catch { throw "Не удалось удалить незавершённую установку '$installName'. Закройте Cursor и повторите попытку." }
         }
     }
 
     if (-not $reuse) {
-        Write-Step "Building installation $installName (MCP mode: $mode)"
+        Write-Step "Подготавливаем установку $installName (режим MCP: $mode)"
         $tmp = Join-Path $InstallsDir ('.new-' + [guid]::NewGuid().ToString('N'))
         try {
             New-Item -ItemType Directory -Path $tmp -Force | Out-Null
             & robocopy $packageDir $tmp /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1 | Out-Null
-            if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
+            if ($LASTEXITCODE -ge 8) { throw "robocopy завершился с кодом $LASTEXITCODE" }
 
             # Keep the upstream launcher out of auto-discovery, so Cursor never starts it.
             $upstreamMcp = Join-Path $tmp '.mcp.json'
@@ -1042,29 +1037,29 @@ function Invoke-Install {
             if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
             throw
         }
-        Write-InstallLog "built $installName (ref $requestedRef, package $packageRef, commit $packageCommit, mode $mode)"
+        Write-InstallLog "Подготовлена установка $installName (ссылка $requestedRef, пакет $packageRef, коммит $packageCommit, режим $mode)"
     }
 
     # 7. Lock check (project mode: the junction is switched immediately) --------
     if ($mode -eq 'project' -and $active -and $active.current -and $active.current -ne $installName) {
         if (Test-InstallInUse (Join-Path $InstallsDir $active.current)) {
-            Write-Warn 'Unica is running from the current installation. In project mode the switch takes effect after the unica server is restarted in every window.'
-            if (-not (Confirm-Action 'Switch anyway?')) {
-                throw 'Cancelled. The new installation was built but not activated.'
+            Write-Warn 'Unica запущена из текущей установки. В режиме project новая версия начнёт работать после перезапуска сервера unica в каждом окне.'
+            if (-not (Confirm-Action 'Переключить версию?')) {
+                throw 'Переключение отменено. Новая установка подготовлена и доступна для активации.'
             }
         }
     }
 
     # 8. Deliver every pinned runtime before changing the active installation.
     # Also run for reused installations to repair incomplete runtime caches.
-    Write-Step 'Prefetching the Unica core and all engines (this can take a while)'
+    Write-Step 'Загружаем ядро Unica и все движки. Это может занять некоторое время.'
     $exe = Join-Path $installDir $script:BootstrapRelPath
     Invoke-WithUnicaEnv $null {
         & $exe prefetch --plugin-root $installDir | Out-Host
         # Check in this scope: the environment wrapper does not propagate
         # a native process's LASTEXITCODE back to its caller.
         if ($LASTEXITCODE -ne 0) {
-            throw "Runtime prefetch failed with exit code $LASTEXITCODE. The active installation was not changed. Check network access and rerun install/update."
+            throw "Загрузка компонентов завершилась с кодом $LASTEXITCODE. Активной остаётся прежняя установка. Проверьте доступ к сети и повторите install или update."
         }
     }
 
@@ -1076,26 +1071,26 @@ function Invoke-Install {
     }
     Set-ModeLink $installName $newState
     Save-Active $installName $previous
-    Write-Step "Active installation: $installName"
-    Write-InstallLog "activated $installName (previous: $previous)"
+    Write-Step "Активная установка: $installName"
+    Write-InstallLog "Активирована установка $installName (предыдущая: $previous)"
 
     # 10-11. Cleanup and hook --------------------------------------------------
     Remove-OldInstalls $installName $previous
-    Write-Step 'Registering the workspaceOpen hook'
+    Write-Step 'Регистрируем обработчик workspaceOpen'
     Register-Hook
 
     # 12. Summary --------------------------------------------------------------
     Write-Host ''
-    Write-Host "Unica $version installed (mode: $mode)." -ForegroundColor Green
-    Write-Info "Installation: $installDir"
+    Write-Host "Установлена Unica $version (режим: $mode)." -ForegroundColor Green
+    Write-Info "Каталог установки: $installDir"
     if ($mode -eq 'project') {
-        Write-Info "Project mode: 'enable' adds the unica server to <project>\.cursor\mcp.json."
-        Write-Info "Projects enabled by an older adapter: rerun 'enable' to switch their server entry to the Cursor shim."
+        Write-Info "В режиме project команда 'enable' добавляет сервер unica в .cursor\mcp.json проекта."
+        Write-Info "В проектах со старым адаптером повторите 'enable', чтобы обновить настройки запуска сервера."
     }
-    Write-Info 'Next steps:'
-    Write-Info '  1. In a project: unica-cursor.ps1 enable -Path <project>   (creates .cursor\unica.enabled)'
-    Write-Info '  2. In Cursor: Developer: Reload Window, then start a NEW chat.'
-    Write-Info 'Windows that are already open keep using the previous version until reloaded.'
+    Write-Info 'Дальнейшие действия'
+    Write-Info '  1. Выполните unica-cursor.ps1 enable -Path <папка проекта>, чтобы создать .cursor\unica.enabled'
+    Write-Info '  2. В Cursor выполните «Developer: Reload Window» и откройте новый чат.'
+    Write-Info 'В открытых окнах новая версия начнёт работать после перезагрузки.'
 }
 
 # ----------------------------------------------------------------------------
@@ -1104,25 +1099,25 @@ function Invoke-Install {
 function Invoke-Rollback {
     $active = Get-Active
     if (-not $active -or -not $active.previous) {
-        throw 'There is no previous installation to roll back to.'
+        throw 'Предыдущая установка для отката отсутствует.'
     }
     $previousDir = Join-Path $InstallsDir $active.previous
     if (-not (Test-Path -LiteralPath $previousDir -PathType Container)) {
-        throw "The previous installation '$($active.previous)' no longer exists on disk."
+        throw "Каталог предыдущей установки '$($active.previous)' отсутствует на диске."
     }
     $state = Get-InstallState $active.previous
     if ($state -and $state.mcpMode -eq 'project' -and $active.current -and (Test-InstallInUse (Join-Path $InstallsDir $active.current))) {
-        Write-Warn 'Unica is running from the current installation. In project mode the switch takes effect after the unica server is restarted.'
-        if (-not (Confirm-Action 'Switch anyway?')) { throw 'Cancelled.' }
+        Write-Warn 'Unica запущена из текущей установки. В режиме project переключение вступит в силу после перезапуска сервера unica.'
+        if (-not (Confirm-Action 'Переключить версию?')) { throw 'Операция отменена.' }
     }
     Set-ModeLink $active.previous $state
     Save-Active $active.previous $active.current
-    Write-InstallLog "rollback: $($active.current) -> $($active.previous)"
-    Write-Host "Rolled back to $($active.previous)." -ForegroundColor Green
+    Write-InstallLog "Откат: $($active.current) -> $($active.previous)"
+    Write-Host "Выполнен откат к $($active.previous)." -ForegroundColor Green
     if ($state) {
-        Write-Info "Version: $($state.version), commit: $($state.packageCommit), MCP mode: $($state.mcpMode)"
+        Write-Info "Версия: $($state.version), коммит: $($state.packageCommit), режим MCP: $($state.mcpMode)"
     }
-    Write-Info 'Run "Developer: Reload Window" in Cursor and start a new chat. Run rollback again to switch back.'
+    Write-Info 'В Cursor выполните «Developer: Reload Window» и откройте новый чат. Повторите rollback, чтобы вернуться к версии, активной до отката.'
 }
 
 # ----------------------------------------------------------------------------
@@ -1131,29 +1126,29 @@ function Invoke-Rollback {
 function Invoke-Enable {
     $active = Get-Active
     if (-not $active -or -not $active.current) {
-        throw 'Unica is not installed. Run "unica-cursor.ps1 install" first.'
+        throw 'Unica ещё не установлена. Выполните "unica-cursor.ps1 install".'
     }
     $project = Resolve-ProjectPath
     $state = Get-InstallState $active.current
 
     $marker = Get-MarkerFile $project
     Write-TextFile $marker ("Unica is enabled for this project (managed by unica-cursor.ps1).`r`nDelete this file to disable it.`r`n")
-    Write-Host "Marker created: $marker" -ForegroundColor Green
+    Write-Host "Создан маркер: $marker" -ForegroundColor Green
 
     if ($state -and $state.mcpMode -eq 'project') {
         $entry = Get-ProjectServerEntry ([bool]$state.expandPaths)
         Add-ProjectMcpEntry $project $entry
-        Write-Info "Server 'unica' added to $(Get-ProjectMcpFile $project)"
+        Write-Info "Сервер 'unica' добавлен в $(Get-ProjectMcpFile $project)"
     }
 
     Add-GeneratedGitIgnore $project
 
     $config = Join-Path $project $script:WorkspaceConfigName
     if (Test-Path -LiteralPath $config) {
-        Write-Info "$($script:WorkspaceConfigName) already exists; left untouched."
+        Write-Info "$($script:WorkspaceConfigName) уже существует."
     }
     elseif ($NoWorkspaceConfig) {
-        Write-Info "$($script:WorkspaceConfigName) was not created (-NoWorkspaceConfig). Unica still detects source sets automatically."
+        Write-Info "$($script:WorkspaceConfigName) пропущен из-за -NoWorkspaceConfig. Unica обнаружит наборы исходников автоматически."
     }
     else {
         New-WorkspaceConfig (Join-Path $InstallsDir $active.current) $project
@@ -1164,19 +1159,19 @@ function Invoke-Enable {
     }
 
     if ($NoRule) {
-        Write-Info 'Agent rule was not created (-NoRule).'
+        Write-Info 'Создание правила агента пропущено из-за -NoRule.'
     }
     else {
         $ruleFile = Get-RuleFile $project
         switch (Set-ProjectRule $project) {
-            'created'   { Write-Host "Agent rule created: $ruleFile" -ForegroundColor Green }
-            'appended'  { Write-Host "Unica block added to the existing rule: $ruleFile" -ForegroundColor Green }
-            'updated'   { Write-Host "Unica block updated in: $ruleFile" -ForegroundColor Green }
-            'unchanged' { Write-Info "Agent rule is up to date: $ruleFile" }
+            'created'   { Write-Host "Создано правило агента: $ruleFile" -ForegroundColor Green }
+            'appended'  { Write-Host "Блок Unica добавлен в существующее правило: $ruleFile" -ForegroundColor Green }
+            'updated'   { Write-Host "Блок Unica обновлён в файле: $ruleFile" -ForegroundColor Green }
+            'unchanged' { Write-Info "Правило агента актуально: $ruleFile" }
         }
     }
-    Write-Info 'In a multi-root workspace the 1C project must be the FIRST folder.'
-    Write-Info 'Now run "Developer: Reload Window" in Cursor and start a new chat.'
+    Write-Info 'Если в рабочей области несколько папок, проект 1С должен быть первым.'
+    Write-Info 'В Cursor выполните «Developer: Reload Window» и откройте новый чат.'
 }
 
 function Invoke-Disable {
@@ -1184,73 +1179,73 @@ function Invoke-Disable {
     $marker = Get-MarkerFile $project
     if (Test-Path -LiteralPath $marker) {
         Remove-Item -LiteralPath $marker -Force
-        Write-Host "Marker removed: $marker" -ForegroundColor Green
+        Write-Host "Маркер удалён: $marker" -ForegroundColor Green
     }
     else {
-        Write-Info 'The marker file did not exist.'
+        Write-Info 'Маркер отсутствует.'
     }
     if (Remove-ProjectMcpEntry $project) {
-        Write-Info "Server 'unica' removed from $(Get-ProjectMcpFile $project)"
+        Write-Info "Сервер 'unica' удалён из $(Get-ProjectMcpFile $project)"
     }
     if (Remove-ProjectRule $project) {
-        Write-Info "Unica block removed from $(Get-RuleFile $project)"
+        Write-Info "Блок Unica удалён из $(Get-RuleFile $project)"
     }
-    Write-Info "$($script:WorkspaceConfigName) and $($script:LocalConfigName) describe the project; left untouched."
-    Write-Info 'Now run "Developer: Reload Window" in Cursor and start a new chat.'
+    Write-Info "$($script:WorkspaceConfigName) и $($script:LocalConfigName) содержат настройки проекта и сохранены."
+    Write-Info 'В Cursor выполните «Developer: Reload Window» и откройте новый чат.'
 }
 
 function Invoke-Status {
     $active = Get-Active
-    Write-Host 'Unica adapter for Cursor' -ForegroundColor Cyan
-    Write-Info "Home: $UnicaHome"
+    Write-Host 'Адаптер Unica для Cursor' -ForegroundColor Cyan
+    Write-Info "Каталог Unica: $UnicaHome"
     if ($active -and $active.current) {
         $state = Get-InstallState $active.current
-        Write-Info "Active:   $($active.current)"
+        Write-Info "Активная установка: $($active.current)"
         if ($state) {
-            Write-Info "          version $($state.version), ref $($state.requestedRef), package ref $($state.packageRef), commit $($state.packageCommit), MCP mode $($state.mcpMode)"
+            Write-Info "          версия $($state.version), ссылка $($state.requestedRef), ссылка пакета $($state.packageRef), коммит $($state.packageCommit), режим MCP $($state.mcpMode)"
         }
         else {
-            Write-Warn 'The state file of the active installation is missing.'
+            Write-Warn 'Файл состояния активной установки отсутствует.'
         }
         $shim = Join-Path (Join-Path $InstallsDir $active.current) $script:ShimRelPath
-        Write-Info ("Cursor shim: {0}" -f $(if (Test-Path -LiteralPath $shim) { 'present' } else { 'missing (run update)' }))
+        Write-Info ("Адаптер Cursor: {0}" -f $(if (Test-Path -LiteralPath $shim) { 'есть' } else { 'отсутствует (выполните update)' }))
         if ($active.previous) {
             $prevExists = Test-Path -LiteralPath (Join-Path $InstallsDir $active.previous)
-            Write-Info "Previous: $($active.previous)$(if (-not $prevExists) { ' (missing on disk)' })"
+            Write-Info "Предыдущая установка: $($active.previous)$(if (-not $prevExists) { ' (каталог отсутствует)' })"
         }
         else {
-            Write-Info 'Previous: none (rollback unavailable)'
+            Write-Info 'Предыдущая установка: отсутствует (откат недоступен)'
         }
     }
     else {
-        Write-Info 'Not installed.'
+        Write-Info 'Unica не установлена.'
     }
-    Write-Info ("Hook registered: {0}" -f $(if (Test-HookRegistered) { 'yes' } else { 'no' }))
-    Write-Info ("Hook script:     {0}" -f $(if (Test-Path -LiteralPath (Join-Path $HooksDir $script:HookScriptName)) { 'present' } else { 'missing' }))
+    Write-Info ("Обработчик workspaceOpen зарегистрирован: {0}" -f $(if (Test-HookRegistered) { 'да' } else { 'нет' }))
+    Write-Info ("Скрипт обработчика: {0}" -f $(if (Test-Path -LiteralPath (Join-Path $HooksDir $script:HookScriptName)) { 'есть' } else { 'отсутствует' }))
 
     $project = Resolve-ProjectPath
     Write-Host ''
-    Write-Host "Project: $project" -ForegroundColor Cyan
-    Write-Info ("Marker (.cursor\unica.enabled): {0}" -f $(if (Test-Path -LiteralPath (Get-MarkerFile $project)) { 'present' } else { 'absent' }))
+    Write-Host "Проект: $project" -ForegroundColor Cyan
+    Write-Info ("Маркер (.cursor\unica.enabled): {0}" -f $(if (Test-Path -LiteralPath (Get-MarkerFile $project)) { 'есть' } else { 'отсутствует' }))
     $doc = Read-JsonFile (Get-ProjectMcpFile $project)
     $hasEntry = ($null -ne $doc -and (Test-JsonProp $doc 'mcpServers') -and (Test-JsonProp $doc.mcpServers $script:ProjectServerName))
-    Write-Info ("Project .cursor\mcp.json has 'unica': {0}" -f $(if ($hasEntry) { 'yes' } else { 'no' }))
+    Write-Info ("Сервер 'unica' в .cursor\mcp.json проекта: {0}" -f $(if ($hasEntry) { 'да' } else { 'нет' }))
     foreach ($name in $script:WorkspaceConfigName, $script:LocalConfigName, $script:LocalExampleName) {
-        Write-Info ("{0} in the root: {1}" -f $name, $(if (Test-Path -LiteralPath (Join-Path $project $name)) { 'yes' } else { 'no' }))
+        Write-Info ("{0} в корне проекта: {1}" -f $name, $(if (Test-Path -LiteralPath (Join-Path $project $name)) { 'да' } else { 'нет' }))
     }
     $ruleFile = Get-RuleFile $project
     $hasRule = (Test-Path -LiteralPath $ruleFile) -and [regex]::IsMatch((Read-TextFile $ruleFile), $script:RuleBlockPattern)
-    Write-Info ("Agent rule (.cursor\rules\unica.mdc): {0}" -f $(if ($hasRule) { 'yes' } else { 'no' }))
+    Write-Info ("Правило агента (.cursor\rules\unica.mdc): {0}" -f $(if ($hasRule) { 'да' } else { 'нет' }))
 }
 
 # ----------------------------------------------------------------------------
 # uninstall
 # ----------------------------------------------------------------------------
 function Invoke-Uninstall {
-    Write-Step 'Removing the workspaceOpen hook'
+    Write-Step 'Удаляем обработчик workspaceOpen'
     Unregister-Hook
 
-    Write-Step 'Removing installations'
+    Write-Step 'Удаляем установки'
     Remove-CurrentLink
     if (Test-Path -LiteralPath $ActiveFile) { Remove-Item -LiteralPath $ActiveFile -Force }
 
@@ -1274,20 +1269,20 @@ function Invoke-Uninstall {
         }
     }
     else {
-        Write-Info 'Kept: runtimes and provider-state.'
+        Write-Info 'Сохранены каталоги runtimes и provider-state.'
     }
 
     if ((Test-Path -LiteralPath $UnicaHome) -and @(Get-ChildItem -LiteralPath $UnicaHome -Force).Count -eq 0) {
         Remove-Item -LiteralPath $UnicaHome -Force
     }
 
-    Write-Host 'Unica was uninstalled.' -ForegroundColor Green
+    Write-Host 'Unica удалена.' -ForegroundColor Green
     if ($leftovers.Count -gt 0) {
-        Write-Warn 'Some directories are in use and were not removed. Close Cursor and delete them manually:'
+        Write-Warn 'Следующие каталоги используются. Закройте Cursor и удалите их вручную:'
         foreach ($item in $leftovers) { Write-Info "  $item" }
     }
-    Write-Info 'Project markers (.cursor\unica.enabled) and project-level .cursor\mcp.json entries were NOT touched.'
-    Write-Info 'Run "Developer: Reload Window" in Cursor.'
+    Write-Info 'Маркеры .cursor\unica.enabled и записи в .cursor\mcp.json проектов сохранены.'
+    Write-Info 'В Cursor выполните «Developer: Reload Window».'
 }
 
 # ----------------------------------------------------------------------------
@@ -1305,7 +1300,7 @@ try {
     }
 }
 catch {
-    Write-Host ("ERROR: " + $_.Exception.Message) -ForegroundColor Red
-    Write-InstallLog ("ERROR ($Command): " + $_.Exception.Message)
+    Write-Host ("ОШИБКА: " + $_.Exception.Message) -ForegroundColor Red
+    Write-InstallLog ("ОШИБКА ($Command): " + $_.Exception.Message)
     exit 1
 }

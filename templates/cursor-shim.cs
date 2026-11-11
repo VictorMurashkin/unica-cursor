@@ -1,4 +1,4 @@
-// unica-cursor-shim: stdio bridge between Cursor and the Unica MCP server.
+﻿// unica-cursor-shim: stdio bridge between Cursor and the Unica MCP server.
 //
 //   unica-cursor-shim.exe <server.exe> [server args...]
 //       Proxy mode. Fixes what Cursor does differently from the MCP spec:
@@ -36,6 +36,7 @@ internal static class Program
 
     private static int Main(string[] args)
     {
+        Console.SetError(new StreamWriter(Console.OpenStandardError(), Utf8) { AutoFlush = true });
         try
         {
             if (args.Length > 0 && args[0] == "--setup")
@@ -54,15 +55,15 @@ internal static class Program
         }
         catch (Exception e)
         {
-            Console.Error.WriteLine("unica-cursor-shim: " + e.Message);
+            Console.Error.WriteLine("Ошибка unica-cursor-shim: " + e.Message);
             return 1;
         }
     }
 
     private static int Usage()
     {
-        Console.Error.WriteLine("usage: unica-cursor-shim <server.exe> [args...]");
-        Console.Error.WriteLine("       unica-cursor-shim --setup <project dir> <out file> <server.exe> [args...]");
+        Console.Error.WriteLine("Использование: unica-cursor-shim <сервер.exe> [аргументы...]");
+        Console.Error.WriteLine("       unica-cursor-shim --setup <папка проекта> <выходной файл> <сервер.exe> [аргументы...]");
         return 2;
     }
 
@@ -323,7 +324,7 @@ internal static class Program
             IDictionary structured = result["structuredContent"] as IDictionary;
             if (structured == null)
             {
-                throw new InvalidOperationException(name + " returned no structuredContent: " + Json.Serialize(result));
+                throw new InvalidOperationException(name + " не вернул поле structuredContent: " + Json.Serialize(result));
             }
             return structured;
         }
@@ -349,12 +350,12 @@ internal static class Program
                 {
                     if (closed)
                     {
-                        throw new InvalidOperationException("the Unica server exited before answering " + method);
+                        throw new InvalidOperationException("Сервер Unica завершил работу до ответа на " + method);
                     }
                     int left = (int)(deadline - DateTime.UtcNow).TotalMilliseconds;
                     if (left <= 0)
                     {
-                        throw new TimeoutException("the Unica server did not answer " + method + " in " + (SetupTimeoutMs / 1000) + " s");
+                        throw new TimeoutException("Сервер Unica не ответил на " + method + " за " + (SetupTimeoutMs / 1000) + " с");
                     }
                     Monitor.Wait(gate, left);
                 }
@@ -362,12 +363,12 @@ internal static class Program
             IDictionary error = reply["error"] as IDictionary;
             if (error != null)
             {
-                throw new InvalidOperationException(method + " failed: " + error["message"]);
+                throw new InvalidOperationException(method + " завершился ошибкой: " + error["message"]);
             }
             IDictionary result = reply["result"] as IDictionary;
             if (result == null)
             {
-                throw new InvalidOperationException(method + " returned no result");
+                throw new InvalidOperationException(method + " не вернул результат");
             }
             return result;
         }
@@ -571,7 +572,7 @@ internal static class Program
         {
             log = new StreamWriter(file, true, Utf8);
             log.AutoFlush = true;
-            log.WriteLine("=== start pid=" + Process.GetCurrentProcess().Id + " cwd=" + Environment.CurrentDirectory);
+            log.WriteLine("=== Запуск. PID=" + Process.GetCurrentProcess().Id + " Рабочая папка: " + Environment.CurrentDirectory);
         }
         catch (IOException)
         {

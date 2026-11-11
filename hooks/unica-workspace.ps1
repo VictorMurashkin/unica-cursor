@@ -1,4 +1,4 @@
-<#
+﻿<#
   Cursor workspaceOpen hook for the Unica adapter.
 
   Input  (stdin, JSON): { "workspace_roots": ["<abs path>", ...], ... }
@@ -11,7 +11,7 @@
   Any failure results in {} (Unica stays off) and a line in logs/hook.log.
   The script always exits with code 0.
 
-  NOTE: keep this file ASCII-only. Windows PowerShell 5.1 reads BOM-less
+  NOTE: keep the UTF-8 BOM. Windows PowerShell 5.1 reads BOM-less
   files in the ANSI code page.
 #>
 $ErrorActionPreference = 'Stop'
@@ -72,13 +72,13 @@ try {
     $reader = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))
     $raw = $reader.ReadToEnd()
     if ([string]::IsNullOrWhiteSpace($raw)) {
-        throw 'empty hook input'
+        throw 'Обработчик workspaceOpen получил пустой ввод'
     }
     $payload = $raw | ConvertFrom-Json
     $roots = @($payload.workspace_roots | Where-Object { $_ })
 
     if ($roots.Count -eq 0) {
-        Write-HookLog 'no workspace roots: Unica stays off'
+        Write-HookLog 'В рабочей области нет папок. Unica выключена'
     }
     else {
         $first = ConvertTo-LocalPath ([string]$roots[0])
@@ -89,39 +89,39 @@ try {
                 $active = [System.IO.File]::ReadAllText($activeFile) | ConvertFrom-Json
             }
             if (-not $active -or -not $active.current) {
-                Write-HookLog ('marker found in "{0}", but Unica is not installed (no active.json)' -f $first)
+                Write-HookLog ('В папке "{0}" есть маркер, однако Unica не установлена (нет active.json)' -f $first)
             }
             else {
                 $installDir = Join-Path (Join-Path $UnicaHome 'installs') ([string]$active.current)
                 if (Test-Path -LiteralPath $installDir -PathType Container) {
                     $result['pluginPaths'] = @($installDir)
-                    Write-HookLog ('ENABLED root="{0}" plugin="{1}"' -f $first, $installDir)
+                    Write-HookLog ('Unica включена. Папка проекта: "{0}". Каталог плагина: "{1}"' -f $first, $installDir)
                 }
                 else {
-                    Write-HookLog ('marker found in "{0}", but install directory is missing: {1}' -f $first, $installDir)
+                    Write-HookLog ('В папке "{0}" есть маркер, однако каталог установки отсутствует: {1}' -f $first, $installDir)
                 }
             }
         }
         else {
             $others = @($roots | Select-Object -Skip 1 | Where-Object { Test-Marker ([string]$_) })
             if ($others.Count -gt 0) {
-                Write-HookLog ('marker found only in a non-first root ({0}); Unica works with the first root "{1}", so it stays off' -f ($others -join '; '), $first)
+                Write-HookLog ('Маркер найден в папках {0}. Unica выключена, поскольку в первой папке "{1}" маркера нет' -f ($others -join '; '), $first)
             }
             else {
-                Write-HookLog ('off root="{0}" (no marker)' -f $first)
+                Write-HookLog ('Unica выключена. В папке "{0}" нет маркера' -f $first)
             }
         }
     }
 }
 catch {
     $result = [ordered]@{}
-    Write-HookLog ('ERROR: {0}' -f $_.Exception.Message)
+    Write-HookLog ('Ошибка обработчика: {0}' -f $_.Exception.Message)
 }
 
 try {
     Send-HookResult $result
 }
 catch {
-    Write-HookLog ('ERROR sending result: {0}' -f $_.Exception.Message)
+    Write-HookLog ('Ошибка отправки результата: {0}' -f $_.Exception.Message)
 }
 exit 0

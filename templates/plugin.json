@@ -1,6 +1,6 @@
 {
   "name": "unica",
-  "description": "Unica: skills and MCP server for 1C:Enterprise development (Cursor adapter)",
+  "description": "Навыки и MCP-сервер Unica для разработки на 1С:Предприятии в Cursor",
   "version": "0.0.0",
   "author": {
     "name": "Ingvar Consulting, LLC"
