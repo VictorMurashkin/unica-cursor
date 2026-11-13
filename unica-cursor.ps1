@@ -1171,7 +1171,9 @@ function Invoke-Enable {
         }
     }
     Write-Info 'Если в рабочей области несколько папок, проект 1С должен быть первым.'
-    Write-Info 'В Cursor выполните «Developer: Reload Window» и откройте новый чат.'
+    Write-Info 'В Cursor выполните «Developer: Reload Window».'
+    Write-Info 'В Customize → MCPs проверьте, что сервер «unica» включён. Если он выключен, включите его.'
+    Write-Info 'Затем откройте новый чат.'
 }
 
 function Invoke-Disable {
