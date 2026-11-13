@@ -71,8 +71,9 @@ Codex и Claude Code, которые Unica указывает среди тре�
    .\unica-cursor.cmd enable -Path "D:\Projects\MyConfig"
    ```
 
-4. В Cursor нажмите `Ctrl+Shift+P`, выполните **Developer: Reload Window** и
-   откройте новый чат.
+4. В Cursor нажмите `Ctrl+Shift+P` и выполните **Developer: Reload Window**.
+   Откройте **Customize → MCPs** и проверьте, что сервер `unica` включён.
+   Если переключатель выключен, включите его. Затем откройте новый чат.
 
 5. Проверьте: попросите агента «вызови unica.view». Он должен показать ваш
    проект и найденные наборы исходников.
